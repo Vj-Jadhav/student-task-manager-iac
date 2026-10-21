@@ -192,7 +192,7 @@ The repository includes a production-grade CI/CD pipeline ([deploy.yml](file:///
    - **Name**: `CLOUDFLARE_API_TOKEN`
      **Value**: Your Cloudflare API Token (with Workers & KV Edit permissions).
    - **Name**: `CLOUDFLARE_ACCOUNT_ID`
-     **Value**: Your 32-character Cloudflare Account ID (`bf319f1e2ff41a2b469b06a494f5bc3f`).
+     **Value**: Your 32-character Cloudflare Account ID (`bf3191fe2ff41a2b469b06a494f5bc3f`).
 
 #### Step 3: Configure Environment Protection for Production
 1. In repository **Settings**, click **Environments** in the left sidebar.
