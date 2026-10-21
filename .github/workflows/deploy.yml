@@ -59,7 +59,7 @@ jobs:
           RAW_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAW_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          python3 -c "
+          python3 <<'PY'
           import os, re
           token = os.environ.get('RAW_TOKEN', '').strip()
           token = re.sub(r'[\r\n\"\'`]+', '', token)
@@ -78,7 +78,7 @@ jobs:
 
           print(f'::add-mask::{token}')
           print(f'::add-mask::{account}')
-          "
+          PY
 
       # Step 4: Enforce standard formatting conventions
       - name: Terraform Format Check
@@ -131,7 +131,7 @@ jobs:
           RAW_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAW_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          python3 -c "
+          python3 <<'PY'
           import os, re
           token = os.environ.get('RAW_TOKEN', '').strip()
           token = re.sub(r'[\r\n\"\'`]+', '', token)
@@ -150,7 +150,7 @@ jobs:
 
           print(f'::add-mask::{token}')
           print(f'::add-mask::{account}')
-          "
+          PY
 
       - name: Terraform Init
         run: terraform init
