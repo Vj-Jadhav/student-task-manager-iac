@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Task Manager | Serverless & Terraform</title>
+  <meta name="description" content="Serverless Student Task Management Application deployed on Cloudflare Workers and Workers KV using Terraform IaC.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient Background Glows -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div>
+          <h1 id="app-title">Student Task Manager</h1>
+          <div class="header-subtitle">
+            <span class="badge badge-tech">Cloudflare Workers</span>
+            <span class="badge badge-tech">Workers KV</span>
+            <span class="badge badge-tech">Terraform IaC</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="api-status-badge" id="api-status-badge" title="Edge API Connectivity">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Checking API...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Metrics Overview -->
+    <section class="metrics-grid" id="metrics-section" aria-label="Task Statistics">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">Total Tasks</span>
+          <span class="metric-icon">📋</span>
+        </div>
+        <div class="metric-value" id="metric-total">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">Pending</span>
+          <span class="metric-icon">⏳</span>
+        </div>
+        <div class="metric-value metric-pending" id="metric-pending">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">In Progress</span>
+          <span class="metric-icon">⚡</span>
+        </div>
+        <div class="metric-value metric-progress" id="metric-progress">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-label">Completed</span>
+          <span class="metric-icon">✅</span>
+        </div>
+        <div class="metric-value metric-completed" id="metric-completed">0</div>
+      </div>
+    </section>
+
+    <!-- Notification / Alert Banner -->
+    <div class="alert-banner" id="alert-banner" style="display: none;" role="alert">
+      <span class="alert-icon" id="alert-icon">ℹ️</span>
+      <span class="alert-message" id="alert-message"></span>
+      <button type="button" class="btn-close-alert" id="btn-close-alert" aria-label="Close notification">&times;</button>
+    </div>
+
+    <!-- Main Workspace Layout -->
+    <main class="main-layout">
+      <!-- Task Creation / Update Form Card -->
+      <section class="card form-card" id="task-form-section">
+        <div class="card-header">
+          <h2 id="form-heading">Create Student Task</h2>
+          <button type="button" class="btn-text" id="btn-cancel-edit" style="display: none;">Cancel Edit</button>
+        </div>
+
+        <form id="task-form" autocomplete="off">
+          <input type="hidden" id="task-id">
+
+          <!-- Task Title -->
+          <div class="form-group">
+            <label for="task-title">Task Title <span class="required">*</span></label>
+            <input 
+              type="text" 
+              id="task-title" 
+              class="form-control" 
+              placeholder="e.g., Complete Terraform Infrastructure Lab" 
+              required 
+              maxlength="150"
+            />
+          </div>
+
+          <!-- Priority & Status Row -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-priority">Priority <span class="required">*</span></label>
+              <select id="task-priority" class="form-control" required>
+                <option value="High">🔥 High</option>
+                <option value="Medium" selected>⚡ Medium</option>
+                <option value="Low">🌱 Low</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="task-status">Status <span class="required">*</span></label>
+              <select id="task-status" class="form-control" required>
+                <option value="Pending" selected>⏳ Pending</option>
+                <option value="In Progress">🚀 In Progress</option>
+                <option value="Completed">✅ Completed</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block" id="btn-submit-task">
+              <span class="spinner" id="btn-spinner" style="display: none;"></span>
+              <span id="btn-submit-label">Add Task</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Task Inventory List Card -->
+      <section class="card tasks-card" id="tasks-list-section">
+        <div class="card-header task-list-header">
+          <div class="header-with-count">
+            <h2>Task Inventory</h2>
+            <span class="task-count-pill" id="task-count-pill">0 tasks</span>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-tasks" title="Reload tasks from Workers KV">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="toolbar" id="tasks-toolbar">
+          <div class="search-box">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input 
+              type="text" 
+              id="search-input" 
+              class="form-control search-input" 
+              placeholder="Search by title or Task ID..."
+              aria-label="Search Tasks"
+            />
+          </div>
+
+          <div class="filters-row">
+            <select id="filter-status" class="form-control filter-select" aria-label="Filter by Status">
+              <option value="ALL">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+
+            <select id="filter-priority" class="form-control filter-select" aria-label="Filter by Priority">
+              <option value="ALL">All Priorities</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Loading State Indicator -->
+        <div class="loading-state" id="loading-state" style="display: none;">
+          <div class="spinner-large"></div>
+          <p>Fetching tasks from Cloudflare Workers KV...</p>
+        </div>
+
+        <!-- Task Items Container -->
+        <div class="tasks-container" id="tasks-container">
+          <!-- Dynamically populated by script.js -->
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="empty-state" style="display: none;">
+          <div class="empty-icon">📝</div>
+          <h3>No Student Tasks Found</h3>
+          <p id="empty-state-msg">No tasks match your active filters. Add a task using the form on the left!</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Automated Deployment of a Serverless Student Task Management Application Using Terraform</p>
+      <div class="footer-meta">
+        <span>Cloudflare Workers Edge API</span> &bull; 
+        <span>Workers KV Storage (TASKS_KV)</span> &bull; 
+        <span>HashiCorp Terraform</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

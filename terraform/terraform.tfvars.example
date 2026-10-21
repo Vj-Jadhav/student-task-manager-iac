@@ -1,0 +1,31 @@
+# ==============================================================================
+# Example Terraform Variables (Template)
+# Copy this file to "terraform.tfvars" and replace the placeholders with your values.
+# IMPORTANT: DO NOT commit your actual "terraform.tfvars" file to version control!
+# ==============================================================================
+
+# Your Cloudflare Account ID:
+# Found on the right sidebar of the Cloudflare Dashboard: https://dash.cloudflare.com/
+cloudflare_account_id = "your_cloudflare_account_id_here"
+
+# Your Cloudflare API Token:
+# Create at https://dash.cloudflare.com/profile/api-tokens
+# (Optional here if set via the CLOUDFLARE_API_TOKEN environment variable)
+# Recommended Permissions:
+#   - Account > Workers Scripts > Edit
+#   - Account > Workers KV Storage > Edit
+#   - Account > Account Settings > Read
+cloudflare_api_token = "your_cloudflare_api_token_here"
+
+# Naming & Environment Variables
+worker_name       = "student-task-manager"
+kv_namespace_name = "student-task-manager-kv"
+environment       = "dev"
+
+# Optional: Set your Cloudflare account workers.dev subdomain prefix
+# e.g., if your URL is https://my-worker.john-doe.workers.dev, set "john-doe"
+workers_dev_subdomain = ""
+
+# Worker settings
+enable_workers_dev = true
+compatibility_date = "2024-09-01"

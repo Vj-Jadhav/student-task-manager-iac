@@ -1,0 +1,69 @@
+# ==========================================
+# Terraform State and Runtime Artifacts
+# ==========================================
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfplan
+*.tftpl
+crash.log
+crash.*.log
+
+# Terraform local directories & provider plugins
+.terraform/
+.terraform.lock.hcl
+terraform.d/
+
+# Terraform override configurations
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# ==========================================
+# Credentials, Secrets & Sensitive Variables
+# ==========================================
+*.tfvars
+*.tfvars.json
+# Explicitly allow the example templates
+!terraform.tfvars.example
+!*.tfvars.example
+
+# Environment variable files
+.env
+.env.*
+*.env
+
+# Private keys, certificates & tokens
+*.pem
+*.key
+*.cert
+*.crt
+*.token
+
+# ==========================================
+# Operating System & IDE Files
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ==========================================
+# Scratch / Build / Dependency Artifacts
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.wrangler/
+dist/
+scratch/
