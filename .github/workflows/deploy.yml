@@ -65,18 +65,34 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check
 
-      # Step 5: Initialize Terraform backend & provider plugins
+      # Step 5: Update lock file for linux_amd64 (resolves Windows/Linux hash mismatch)
+      # The lock file committed from Windows only has windows_amd64 hashes.
+      # This regenerates it for the current runner platform before init.
+      - name: Update Provider Lock File for linux_amd64
+        run: terraform providers lock -platform=linux_amd64
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
+
+      # Step 6: Initialize Terraform backend & provider plugins
       - name: Terraform Init
         run: terraform init
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
+          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
 
-      # Step 6: Validate configuration syntax and schema
+      # Step 7: Validate configuration syntax and schema
       - name: Terraform Validate
         run: terraform validate
 
-      # Step 7: Generate execution plan (Speculative, no changes applied)
+      # Step 8: Generate execution plan (Speculative, no changes applied)
       - name: Terraform Plan
         id: plan
         env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
+          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
           TF_VAR_environment: ${{ github.event.inputs.environment || 'dev' }}
         run: terraform plan -no-color
 
@@ -112,13 +128,26 @@ jobs:
           RAW_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: python3 ${{ github.workspace }}/scripts/sanitize_env.py
 
+      # Update lock file for linux_amd64 before init (same fix as validate job)
+      - name: Update Provider Lock File for linux_amd64
+        run: terraform providers lock -platform=linux_amd64
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+
       - name: Terraform Init
         run: terraform init
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
+          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
 
       # Controlled deployment: Applies planned resources, never destroys
       - name: Terraform Apply
         id: apply
         env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
+          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
           TF_VAR_environment: ${{ github.event.inputs.environment || 'dev' }}
         run: |
           terraform apply -auto-approve
@@ -126,3 +155,7 @@ jobs:
 
       - name: Print Deployment Outputs
         run: terraform output
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
+          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
