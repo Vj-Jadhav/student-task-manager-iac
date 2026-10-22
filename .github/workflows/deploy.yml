@@ -1,3 +1,4 @@
+
 name: CI/CD Pipeline - Terraform & Cloudflare Deployment
 
 on:
@@ -9,6 +10,7 @@ on:
       - 'application/**'
       - 'scripts/**'
       - '.github/workflows/deploy.yml'
+
   pull_request:
     branches:
       - main
@@ -16,6 +18,8 @@ on:
       - 'terraform/**'
       - 'application/**'
       - 'scripts/**'
+      - '.github/workflows/deploy.yml'
+
   workflow_dispatch:
     inputs:
       environment:
@@ -33,81 +37,97 @@ permissions:
   pull-requests: write
 
 jobs:
-  # ============================================================================
-  # Stage 1: Quality Gate & Validation (Runs on PRs and Pushes to main)
-  # ============================================================================
+  # Stage 1: Validate and plan
   validate-and-plan:
     name: Terraform Lint, Validate & Plan
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: ./terraform
 
     steps:
-      # Step 1: Checkout repository (Pinned to commit SHA for supply-chain security)
       - name: Checkout Source Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # Step 2: Install HashiCorp Terraform CLI (Pinned to commit SHA)
       - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.9.0"
 
-      # Step 3: Sanitize credentials (strips newlines, quotes, or accidental "Bearer " prefix)
       - name: Sanitize Cloudflare Credentials
         env:
           RAW_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAW_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: python3 ${{ github.workspace }}/scripts/sanitize_env.py
+        run: python3 "${{ github.workspace }}/scripts/sanitize_env.py"
 
-      # Step 4: Enforce standard formatting conventions
-      - name: Terraform Format Check
-        run: terraform fmt -check
-
-      # Step 5: Update lock file for linux_amd64 (resolves Windows/Linux hash mismatch)
-      # The lock file committed from Windows only has windows_amd64 hashes.
-      # This regenerates it for the current runner platform before init.
-      - name: Update Provider Lock File for linux_amd64
-        run: terraform providers lock -platform=linux_amd64
+      - name: Verify Cloudflare Token
+        if: github.event_name != 'pull_request'
         env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import json
+          import urllib.request
+          import urllib.error
 
-      # Step 6: Initialize Terraform backend & provider plugins
+          token = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+
+          if not token:
+              raise SystemExit("Cloudflare API token secret is missing.")
+
+          request = urllib.request.Request(
+              "https://api.cloudflare.com/client/v4/user/tokens/verify",
+              headers={"Authorization": f"Bearer {token}"}
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  result = json.load(response)
+
+              if result.get("success"):
+                  print("Cloudflare API token is valid.")
+              else:
+                  print("Cloudflare API token verification failed.")
+                  raise SystemExit(1)
+
+          except urllib.error.HTTPError as error:
+              print("Cloudflare token verification failed. HTTP status:", error.code)
+              raise SystemExit(1)
+          except urllib.error.URLError:
+              print("Could not connect to Cloudflare API.")
+              raise SystemExit(1)
+          PY
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
       - name: Terraform Init
         run: terraform init
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
-          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
 
-      # Step 7: Validate configuration syntax and schema
       - name: Terraform Validate
         run: terraform validate
 
-      # Step 8: Generate execution plan (Speculative, no changes applied)
       - name: Terraform Plan
-        id: plan
         env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
-          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
           TF_VAR_environment: ${{ github.event.inputs.environment || 'dev' }}
         run: terraform plan -no-color
 
-  # ============================================================================
-  # Stage 2: Controlled Production Deployment (Requires Environment Approval)
-  # Never runs on pull requests. Only triggers on merged pushes to main or dispatch.
-  # ============================================================================
+  # Stage 2: Deploy to Cloudflare
   deploy-production:
     name: Deploy to Cloudflare
     needs: validate-and-plan
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+
+    if: >-
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      github.event_name == 'workflow_dispatch'
+
     runs-on: ubuntu-latest
+
     environment:
       name: production
-      url: ${{ steps.apply.outputs.worker_url }}
+
     defaults:
       run:
         working-directory: ./terraform
@@ -121,41 +141,61 @@ jobs:
         with:
           terraform_version: "1.9.0"
 
-      # Sanitize credentials before apply
       - name: Sanitize Cloudflare Credentials
         env:
           RAW_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAW_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: python3 ${{ github.workspace }}/scripts/sanitize_env.py
+        run: python3 "${{ github.workspace }}/scripts/sanitize_env.py"
 
-      # Update lock file for linux_amd64 before init (same fix as validate job)
-      - name: Update Provider Lock File for linux_amd64
-        run: terraform providers lock -platform=linux_amd64
+      - name: Verify Cloudflare Token
         env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import json
+          import urllib.request
+          import urllib.error
+
+          token = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+
+          if not token:
+              raise SystemExit("Cloudflare API token secret is missing.")
+
+          request = urllib.request.Request(
+              "https://api.cloudflare.com/client/v4/user/tokens/verify",
+              headers={"Authorization": f"Bearer {token}"}
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  result = json.load(response)
+
+              if result.get("success"):
+                  print("Cloudflare API token is valid.")
+              else:
+                  print("Cloudflare API token verification failed.")
+                  raise SystemExit(1)
+
+          except urllib.error.HTTPError as error:
+              print("Cloudflare token verification failed. HTTP status:", error.code)
+              raise SystemExit(1)
+          except urllib.error.URLError:
+              print("Could not connect to Cloudflare API.")
+              raise SystemExit(1)
+          PY
 
       - name: Terraform Init
         run: terraform init
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
-          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
 
-      # Controlled deployment: Applies planned resources, never destroys
       - name: Terraform Apply
         id: apply
         env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
-          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
           TF_VAR_environment: ${{ github.event.inputs.environment || 'dev' }}
         run: |
-          terraform apply -auto-approve
-          echo "worker_url=$(terraform output -raw worker_url 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
+          terraform apply -auto-approve -input=false
+          worker_url="$(terraform output -raw worker_url 2>/dev/null || true)"
+          echo "worker_url=${worker_url}" >> "$GITHUB_OUTPUT"
 
       - name: Print Deployment Outputs
         run: terraform output
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_cloudflare_account_id: ${{ env.TF_VAR_cloudflare_account_id }}
-          TF_VAR_cloudflare_api_token: ${{ env.TF_VAR_cloudflare_api_token }}
